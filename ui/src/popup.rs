@@ -397,8 +397,8 @@ impl ClipboardPopup {
                 hbox.append(&index_label);
                 
                 // Content label (truncated)
-                let content = if entry.content.len() > 80 {
-                    format!("{}...", &entry.content[..80])
+                let content = if entry.content.chars().count() > 80 {
+                    format!("{}...", entry.content.chars().take(80).collect::<String>())
                 } else {
                     entry.content.clone()
                 };
@@ -486,8 +486,8 @@ fn create_row_for_entry(entry: &ClipboardEntry, index: usize) -> ListBoxRow {
     hbox.append(&index_label);
     
     // Content label (truncated)
-    let content = if entry.content.len() > 80 {
-        format!("{}...", &entry.content[..80])
+    let content = if entry.content.chars().count() > 80 {
+        format!("{}...", entry.content.chars().take(80).collect::<String>())
     } else {
         entry.content.clone()
     };
@@ -525,15 +525,25 @@ fn navigate_list(list_box: &ListBox, direction: i32) {
 }
 
 fn copy_to_clipboard(content: &str) -> Result<()> {
-    use arboard::Clipboard;
-    
-    let mut clipboard = Clipboard::new()
-        .map_err(|e| anyhow::anyhow!("Failed to access clipboard: {}", e))?;
-    
-    clipboard.set_text(content)
-        .map_err(|e| anyhow::anyhow!("Failed to set clipboard content: {}", e))?;
-    
-    info!("Copied to clipboard using arboard");
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    // Use wl-copy so a background process serves the clipboard data after
+    // this window closes. arboard loses ownership when the GTK window exits,
+    // which means ydotool pastes into an empty clipboard on Wayland.
+    let mut child = Command::new("wl-copy")
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to spawn wl-copy: {}", e))?;
+
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin
+            .write_all(content.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to write to wl-copy: {}", e))?;
+    }
+
+    // Do not wait — wl-copy runs in the background serving clipboard data.
+    info!("Copied to clipboard using wl-copy");
     Ok(())
 }
 
