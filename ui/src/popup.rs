@@ -160,9 +160,10 @@ impl ClipboardPopup {
         index_label.set_width_request(30);
         hbox.append(&index_label);
         
-        // Content label (truncated)
-        let content = if entry.content.len() > 80 {
-            format!("{}...", &entry.content[..80])
+        // Content label (truncated) — use char-aware truncation to avoid
+        // panicking on multi-byte UTF-8 characters at byte boundary 80.
+        let content = if entry.content.chars().count() > 80 {
+            format!("{}...", entry.content.chars().take(80).collect::<String>())
         } else {
             entry.content.clone()
         };
