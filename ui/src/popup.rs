@@ -530,7 +530,7 @@ fn copy_to_clipboard(content: &str) -> Result<()> {
 
     // Use wl-copy so a background process serves the clipboard data after
     // this window closes. arboard loses ownership when the GTK window exits,
-    // which means ydotool pastes into an empty clipboard on Wayland.
+    // which means wtype pastes into an empty clipboard on Wayland.
     let mut child = Command::new("wl-copy")
         .stdin(Stdio::piped())
         .spawn()
@@ -551,18 +551,18 @@ fn spawn_auto_paste() {
     use std::process::Command;
     use std::thread;
     use std::time::Duration;
-    
+
     // Spawn a thread to handle auto-paste after a short delay
     thread::spawn(|| {
         // Small delay to ensure window closes and focus returns
         thread::sleep(Duration::from_millis(200));
-        
-        // Always use Ctrl+Shift+V for paste
-        info!("Executing auto-paste with Ctrl+Shift+V");
-        
-        // Execute ydotool
+
+        // Use ydotool to simulate Ctrl+Shift+V via /dev/uinput (kernel-level,
+        // works on GNOME Wayland). No ydotoold daemon needed — direct uinput
+        // access is granted via the input group + udev rule.
+        info!("Executing auto-paste with Ctrl+Shift+V via ydotool");
         match Command::new("ydotool")
-            .args(&["key", "ctrl+shift+v"])
+            .args(&["key", "--delay", "100", "ctrl+shift+v"])
             .output()
         {
             Ok(output) => {
@@ -574,15 +574,7 @@ fn spawn_auto_paste() {
                 }
             }
             Err(e) => {
-                warn!("Failed to execute ydotool: {}. Trying wtype fallback...", e);
-                
-                // Try wtype as fallback
-                if let Err(e) = Command::new("wtype")
-                    .args(&["-M", "ctrl", "-M", "shift", "-P", "v", "-m", "shift", "-m", "ctrl"])
-                    .output() 
-                {
-                    error!("Both ydotool and wtype failed: {}", e);
-                }
+                error!("Failed to execute ydotool: {}", e);
             }
         }
     });
